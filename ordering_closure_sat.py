@@ -1,9 +1,10 @@
 from __future__ import annotations
-from typing import List, Tuple, Set, FrozenSet
+from typing import List, Tuple, Set, FrozenSet, Dict, Optional
 from itertools import chain, combinations
 import networkx as nx
 
-space: frozenset = {'A', 'B', 'C', 'D'}
+space: frozenset = frozenset({'A', 'B', 'C', 'D'})
+# (A, B, C, D) represents A|B ? C|D, where ? is either > or >=
 Comparison = Tuple[frozenset, frozenset, frozenset, frozenset]
 
 
@@ -11,14 +12,27 @@ Comparison = Tuple[frozenset, frozenset, frozenset, frozenset]
 def prt(a: frozenset) -> str:
     if len(a) == 0:
         return 'Ø'
-    return ','.join(set(a))
+    # return ','.join(set(a))
     # replace previous line with following line to print out set brackets
-    # return '{' + ','.join(set(a)) + '}'
+    return '{' + ','.join(set(a)) + '}'
 
 
 def powerset(iterable):
     s = list(iterable)
     return chain.from_iterable(combinations(s, r) for r in range(len(s) + 1))
+
+
+class Ordering:
+
+    def __init__(self, qualcomps: Optional[Set[QualComparison]] = None,
+                 ax5dict: Optional[Dict[(frozenset, frozenset), Set[QualComparison]]] = None):
+        self.ax5dict = ax5dict if ax5dict else {}
+        self.qualcomps = qualcomps if qualcomps else set()
+
+    def add_comparison(self, qc: QualComparison):
+        self.qualcomps.add(qc)
+        key = (qc.comparison[1], qc.comparison[3])
+        self.ax5dict[key].add(qc)
 
 
 class QualComparison:
@@ -57,10 +71,7 @@ class QualComparison:
 
 
 def flip_helper(comp: Comparison) -> Comparison:
-    flipped_comp: List[FrozenSet] = []
-    flipped_comp[0:2] = comp[2:4]
-    flipped_comp[2:4] = comp[0:2]
-    return tuple(flipped_comp)
+    return (comp[2], comp[3], comp[0], comp[1])
 
 
 def flip(qc: QualComparison) -> QualComparison:
@@ -84,14 +95,20 @@ def transitive_reflexive_closure(ordering: Set[QualComparison]) -> Set[QualCompa
                 ordering.add(QualComparison((src[0], src[1], dst[0], dst[1]), True))
 
 
-def reflexive_and_axiom_3_seed() -> Set[QualComparison]:
-    ordering = set()
+# The seed includes the reflexive condition and Axioms 3 and 4
+def seed() -> Ordering:
+    ordering = Ordering()
     for A in powerset(space):
         for B in powerset(space):
-            ordering.add(QualComparison((frozenset(A), frozenset(B), frozenset(A), frozenset(B)), False))  # Reflexivity
-            ordering.add(QualComparison((frozenset(A), frozenset(A), frozenset(B), frozenset(B)), False))  # Axiom 3a
-            ordering.add(QualComparison((space, space, frozenset(A), frozenset(B)), False))  # Axiom 3b
+            fs = frozenset
+            ordering.add_comparison(QualComparison((fs(A), fs(B), fs(A), fs(B)), False))  # Reflexivity
+            ordering.add_comparison(QualComparison((fs(A), fs(A), fs(B), fs(B)), False))  # Axiom 3a
+            ordering.add_comparison(QualComparison((space, space, fs(A), fs(B)), False))  # Axiom 3b
+            # Axiom 4
+            ordering.add_comparison(QualComparison((fs(A) & fs(B), fs(B), fs(A), fs(B)), False))
+            ordering.add_comparison(QualComparison((fs(A), fs(B), fs(A) & fs(B), fs(B)), False))
     return ordering
+
 
 # Don't need to worry about applying Ax 4 to new clauses because of the idempotency of intersection
 def axiom_4(ordering: Set[QualComparison]) -> Set[QualComparison]:
@@ -102,18 +119,22 @@ def axiom_4(ordering: Set[QualComparison]) -> Set[QualComparison]:
         ordering.add(QualComparison((x & y, y, w & z, z), qc.strict))
 
 
-# Only checks if each pair of comparisons are compatible. Doesn't check if a partial
-# ordering can be extended to a consistent full ordering.
+# Checks if each pair of comparisons are compatible.
+# Returns false if there is a comparison of the form A|B > A|B
+# Doesn't check if a partial ordering can be extended to a consistent full ordering.
 def check_pairwise_sat(ordering: Set[QualComparison]) -> bool:
     for qc1 in ordering:
+        comp = qc1.comparison
+        if comp[0] == comp[2] and comp[1] == comp[3] and qc1.strict:  # A|B > A|B
+            return False
         for qc2 in ordering:
             if qc1.contradicts(qc2):
                 return False
     return True
 
 
-if __name__ == "__main__":
-    c1 = [{'A'}, {'B'}, {'C'}, {'D'}]
+def main():
+    c1 = [{'A'}, {'B'}, {'C', 'D'}, {'D'}]
     c2 = [{'C'}, {'D'}, {'E'}, {'F'}]
     c3 = [{'X'}, {'Y'}, {'C'}, {'D'}]
     c4 = [{'E'}, {'F'}, {'A'}, {'B'}]
@@ -121,10 +142,12 @@ if __name__ == "__main__":
     qc2 = QualComparison(tuple(frozenset(s) for s in c2), False)
     qc3 = QualComparison(tuple(frozenset(s) for s in c3), False)
     qc4 = QualComparison(tuple(frozenset(s) for s in c4), False)
-    ordering = {qc1, qc2, qc3, qc4}
-    # ordering = reflexive_seed()
+    ordering = seed()
     print(ordering)
     print(check_pairwise_sat(ordering))
     transitive_reflexive_closure(ordering)
     print(ordering)
     print(check_pairwise_sat(ordering))
+
+
+main()
