@@ -1,11 +1,13 @@
 from __future__ import annotations
 from datetime import datetime
 from typing import List, Tuple, Set, FrozenSet, Dict, Optional, Any
-from itertools import chain, combinations
+from itertools import chain, combinations, product
 from collections import defaultdict
 import networkx as nx
 
-space: frozenset = frozenset({'E', '0.2', '0.4', '0.5'})
+Theta: frozenset = frozenset({'0.2', '0.4'})
+Omega: frozenset = frozenset({'E', 'F'})
+Delta: frozenset = frozenset(product(Theta, Omega))
 # (A, B, C, D) represents A|B ? C|D, where ? is either > or >=
 Comparison = Tuple[frozenset, frozenset, frozenset, frozenset]
 
@@ -14,7 +16,7 @@ Comparison = Tuple[frozenset, frozenset, frozenset, frozenset]
 def prt(a: frozenset) -> str:
     if len(a) == 0:
         return 'Ø'
-    return ','.join(set(a)) if len(a) == 1 else '{' + ','.join(set(a)) + '}'
+    return ','.join(map(str, set(a))) if len(a) == 1 else '{' + ','.join(map(str, set(a))) + '}'
     # replace previous line with following line to always print out set brackets
     # return '{' + ','.join(set(a)) + '}'
 
@@ -79,7 +81,7 @@ class Ordering:
         dict: Dict[(frozenset, frozenset), Dict[int, Set[QualComparison]]] = self.ax5dict
         for (c1, c2), buckets in dict.items():  # orderings of the form a1|c1 > a2|c2
             # The comparisons are in buckets based on the |a1| + |a2|
-            n = 2 * len(space)  # maximum bucket size
+            n = 2 * len(Delta)  # maximum bucket size
             # iterate over all buckets. When i = j, this checks all pairs within a bucket, otherwise across buckets.
             for i in range(0, n + 1):
                 for j in range(i, n + 1):
@@ -148,12 +150,13 @@ class Ordering:
 
     # The seed includes the reflexive condition and Axioms 3 and 4
     def seed(self: Ordering):
-        for A in powerset(space):
-            for B in powerset(space):
-                fs = frozenset
-                self.add_comparison(QualComparison((fs(A), fs(B), fs(A), fs(B)), False))  # Reflexivity
+        fs = frozenset
+        self.add_comparison(QualComparison((Delta, Delta, fs(), Delta), False))  # Modified Axiom 2
+        for A in powerset(Delta):
+            for B in powerset(Delta):
+                self.add_comparison(QualComparison((fs(A), fs(B), fs(A), fs(B)), False))  # Reflexivity\
                 self.add_comparison(QualComparison((fs(A), fs(A), fs(B), fs(B)), False))  # Axiom 3a
-                self.add_comparison(QualComparison((space, space, fs(A), fs(B)), False))  # Axiom 3b
+                self.add_comparison(QualComparison((Delta, Delta, fs(A), fs(B)), False))  # Axiom 3b
                 # Axiom 4
                 self.add_comparison(QualComparison((fs(A) & fs(B), fs(B), fs(A), fs(B)), False))
                 self.add_comparison(QualComparison((fs(A), fs(B), fs(A) & fs(B), fs(B)), False))
@@ -265,12 +268,12 @@ def prob_prior_comps(prior_prob: Dict[str, float]) -> Set[QualComparison]:
             p1 = Q(prior_prob, A)
             p2 = Q(prior_prob, B)
             if p1 > p2:
-                comps.add(QualComparison((fs(A), space, fs(B), space), True))
+                comps.add(QualComparison((fs(A), Delta, fs(B), Delta), True))
             elif p2 > p1:
-                comps.add(QualComparison((fs(B), space, fs(A), space), True))
+                comps.add(QualComparison((fs(B), Delta, fs(A), Delta), True))
             else:
-                comps.add(QualComparison((fs(A), space, fs(B), space), False))
-                comps.add(QualComparison((fs(B), space, fs(A), space), False))
+                comps.add(QualComparison((fs(A), Delta, fs(B), Delta), False))
+                comps.add(QualComparison((fs(B), Delta, fs(A), Delta), False))
     return comps
 
 
@@ -292,6 +295,8 @@ def print_stats(start_time, ordering, msg=None):
 
 def test_prob_prior():
     prior_probs: Dict[str, float] = {'0.2': 0.05, '0.4': 0.45, '0.5': 0.5}
+    print(Delta)
+    print(prt(Delta))
 
     print(set(prior_probs.keys()))
     # Add comparisons from likelihoods and prior over hypotheses
